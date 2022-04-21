@@ -1,0 +1,193 @@
+Sub Import()
+Dim FileToOpen As Variant
+Dim OpenBook As Workbook
+Dim NameOfWorkbook As String
+Dim arr As Variant
+Application.Calculation = xlCalculationManual
+Application.DisplayStatusBar = False
+Application.EnableEvents = False
+Application.ScreenUpdating = False
+Application.DisplayAlerts = False
+Sheets.Add(After:=ActiveSheet).Name = "Temp1"
+Sheets.Add(After:=ActiveSheet).Name = "Temp2"
+Sheets.Add(After:=ActiveSheet).Name = "Stock at " & Format(Now, "DD-MM-YY HH-MM")
+NameOfWorkbook = ActiveSheet.Name
+
+'Step 1 open the Gamlingay book to import the data into NameOfWorkbook
+
+FileToOpen = Application.GetOpenFilename(Title:="Select Gamlingay Yard stock report in csv format")
+    If FileToOpen <> False Then
+    Set OpenBook = Application.Workbooks.Open(FileToOpen)
+    OpenBook.Sheets(1).Columns(3).Copy Destination:=ThisWorkbook.Sheets(NameOfWorkbook).Columns(1)
+    OpenBook.Sheets(1).Columns(4).Copy Destination:=ThisWorkbook.Sheets(NameOfWorkbook).Columns(2)
+    OpenBook.Sheets(1).Columns(7).Copy Destination:=ThisWorkbook.Sheets(NameOfWorkbook).Columns(3)
+    ThisWorkbook.Sheets(NameOfWorkbook).Range("C1").Value = "Gamlingay Yard Stock Available"
+    OpenBook.Close False
+    End If
+
+'Step 2 open the St.Neots book to import the data into NameOfWorkbook
+
+FileToOpen = Application.GetOpenFilename(Title:="Select St.Neots stock report in csv format")
+    If FileToOpen <> False Then
+    Set OpenBook = Application.Workbooks.Open(FileToOpen)
+    OpenBook.Sheets(1).Columns(7).Copy Destination:=ThisWorkbook.Sheets(NameOfWorkbook).Columns(4)
+    ThisWorkbook.Sheets(NameOfWorkbook).Range("D1").Value = "St.Neots Yard Stock Available"
+    OpenBook.Close False
+    End If
+
+Sheets(NameOfWorkbook).Columns("A:D").sort key1:=Range("B2"), _
+      order1:=xlAscending, Header:=xlYes
+
+'Step 3 open the stock book to import the data into Temp1
+
+FileToOpen = Application.GetOpenFilename(Title:="Select Current Hires report in csv format")
+    If FileToOpen <> False Then
+    Set OpenBook = Application.Workbooks.Open(FileToOpen)
+    arr = OpenBook.Sheets(1).Range("A1").CurrentRegion
+    rowCount = UBound(arr, 1)
+    columnCount = UBound(arr, 2)
+    ThisWorkbook.Sheets("Temp1").Range("A1").Resize(rowCount, columnCount).Value = arr
+    OpenBook.Close False
+    End If
+
+'Step 4 join Site number with item for join stock from different days
+
+Dim arr2 As Variant
+Dim i As Long, SiteName As Variant
+
+arr2 = ThisWorkbook.Sheets("Temp1").Range("A1").CurrentRegion
+    For i = LBound(arr2) To UBound(arr2)
+    SiteName = split(arr2(i, 2), " - ")
+    arr2(i, 1) = SiteName(UBound(SiteName)) & " && " & ThisWorkbook.Sheets("Temp1").Cells(i, 4).Value
+    arr2(i, 2) = ThisWorkbook.Sheets("Temp1").Cells(i, 7).Value
+    Next i
+    
+rowCount = UBound(arr2, 1)
+columnCount = UBound(arr2, 2)
+ThisWorkbook.Sheets("Temp1").Range("A1").Resize(rowCount, columnCount).Value = arr2
+ThisWorkbook.Sheets("Temp1").Columns("c:M").EntireColumn.Delete
+
+'Step 5 join stock from same site sent different days
+
+Dim WorkRng As Range
+Dim Dic As Variant
+On Error Resume Next
+Set WorkRng = Range("A2:B5000")
+Set Dic = CreateObject("Scripting.Dictionary")
+arr = WorkRng.Value
+For i = 1 To UBound(arr, 1)
+    Dic(arr(i, 1)) = Dic(arr(i, 1)) + arr(i, 2)
+Next
+WorkRng.ClearContents
+WorkRng.Range("A1").Resize(Dic.Count, 1) = Application.WorksheetFunction.transpose(Dic.Keys)
+WorkRng.Range("B1").Resize(Dic.Count, 1) = Application.WorksheetFunction.transpose(Dic.items)
+
+
+
+'Step 6 Separate site and material
+arr3 = ThisWorkbook.Sheets("temp1").Range("A1").CurrentRegion
+For i = 2 To UBound(arr3, 1)
+    ThisWorkbook.Sheets("Temp1").Cells(i, 3) = ThisWorkbook.Sheets("Temp1").Cells(i, 2)
+    RESULT = split(ThisWorkbook.Sheets("Temp1").Cells(i, 1), " && ")
+    ThisWorkbook.Sheets("Temp1").Cells(i, 1) = RESULT(0)
+    ThisWorkbook.Sheets("Temp1").Cells(i, 2) = RESULT(1)
+    Next
+
+'Step 7 replace item code with name
+
+arr4 = ThisWorkbook.Sheets("temp1").Range("A1").CurrentRegion
+For i = 2 To UBound(arr4, 1)
+    For j = 2 To 300
+        If Worksheets("Temp1").Cells(i, 2) = Worksheets(NameOfWorkbook).Cells(j, 1) Then
+            Worksheets("Temp1").Cells(i, 2) = Worksheets(NameOfWorkbook).Cells(j, 2)
+            End If
+    Next j
+Next i
+      
+'ThisWorkbook.Sheets(NameOfWorkbook).Columns("A:A").EntireColumn.Delete
+
+'Step 8 copy and order stock
+       
+Sheets("temp2").Range("a1:a5000").Value = Sheets("Temp1").Range("a1:a5000").Value
+Sheets("temp2").Columns(1).RemoveDuplicates Columns:=Array(1)
+ThisWorkbook.Sheets("Temp2").Columns("A:A").sort key1:=ThisWorkbook.Sheets("Temp2").Range("A2"), order1:=xlAscending, Header:=xlYes
+
+
+
+For i = 5 To 100
+    Sheets(NameOfWorkbook).Cells(1, i).Value = Sheets("temp2").Cells(i, 1).Value
+    Next
+    
+Sheets(NameOfWorkbook).Rows(1).orientation = 90
+Worksheets(NameOfWorkbook).Columns().columnwidth = 3
+Worksheets(NameOfWorkbook).Columns("B").columnwidth = 50
+Worksheets(NameOfWorkbook).Columns("C").columnwidth = 6
+Worksheets(NameOfWorkbook).Columns("D").columnwidth = 6
+Worksheets(NameOfWorkbook).Columns("A").Delete
+'Worksheets(NameOfWorkbook).Columns("A").Hidden = True
+
+'Step 9 populate the main sheet
+
+For i = 1 To 1500
+    For j = 1 To 150
+       For k = 1 To 300
+       If Worksheets("Temp1").Cells(i, 1) = Worksheets(NameOfWorkbook).Cells(1, j) And Worksheets("Temp1").Cells(i, 2) = Worksheets(NameOfWorkbook).Cells(k, 1) Then
+            Worksheets(NameOfWorkbook).Cells(k, j) = Worksheets("Temp1").Cells(i, 3)
+            End If
+       Next k
+    Next j
+Next i
+
+
+'    Dim c As Object ' Dictionary
+'    Dim r As Object ' Dictionary
+'    Dim Ws As Worksheet
+'    Dim toWs As Worksheet
+'    Dim vDB, vR()
+'    Dim k As Long
+'    Dim x As Long, y As Long
+
+
+'    Set Ws = Sheets("Temp1")
+'    Set toWs = Sheets(NameOfWorkbook)
+
+'    Set c = CreateObject("Scripting.Dictionary") 'shops
+'    Set r = CreateObject("Scripting.Dictionary") 'fruit
+
+ '   vDB = Ws.Range("a1").CurrentRegion
+
+'    For i = 2 To UBound(vDB, 1) 'if have header in sheet temp1 then i start with 2
+'        If Not c.Exists(vDB(i, 1)) Then
+'            k = k + 1
+'            c.Add vDB(i, 1), k  'Shop
+'        End If
+'        If Not r.Exists(vDB(i, 2)) Then
+'            j = j + 1
+'            r.Add vDB(i, 2), j  'Fruit
+'        End If
+'    Next i
+'    ReDim vR(1 To j, 1 To k)
+'    For i = 2 To UBound(vDB, 1) 'if have header in sheet temp1 then i start with 2
+'        x = c.Item(vDB(i, 1))
+'        y = r.Item(vDB(i, 2))
+'        vR(y, x) = vR(y, x) + vDB(i, 3)
+'    Next i
+
+    'With toWs
+ '       .Range("a1").CurrentRegion.Clear
+'        .Range("a2").Resize(j, 1) = WorksheetFunction.transpose(r.Keys)
+ '       .Range("b1").Resize(1, k) = c.Keys
+'        .Range("b2").Resize(j, k) = vR
+'    End With
+
+'Step 10 delete auxiliar sheets
+
+'ThisWorkbook.Sheets("Temp1").Delete
+'ThisWorkbook.Sheets("Temp2").Delete
+Application.DisplayAlerts = True
+Application.ScreenUpdating = True
+Application.Calculation = xlCalculationAutomatic
+Application.DisplayStatusBar = True
+Application.EnableEvents = True
+End Sub
+'
